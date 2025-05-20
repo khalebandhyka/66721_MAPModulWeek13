@@ -4,6 +4,7 @@ apply plugin: 'kotlin-android'
 android {
     namespace "com.example.android.whileinuselocation"
     compileSdkVersion 34
+    buildToolsVersion "29.0.2"
     defaultConfig {
         applicationId "com.example.android.whileinuselocation"
         minSdkVersion 26
