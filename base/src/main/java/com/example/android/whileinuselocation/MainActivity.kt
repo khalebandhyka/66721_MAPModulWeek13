@@ -1,13 +1,7 @@
 package com.example.android.whileinuselocation
 
 import android.Manifest
-import android.content.BroadcastReceiver
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.content.ServiceConnection
-import android.content.SharedPreferences
+import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
 import android.net.Uri
@@ -26,17 +20,16 @@ private const val TAG = "MainActivity"
 private const val REQUEST_FOREGROUND_ONLY_PERMISSIONS_REQUEST_CODE = 34
 
 class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceChangeListener {
-    private var foregroundOnlyLocationServiceBound = false
 
+    private var foregroundOnlyLocationServiceBound = false
     private var foregroundOnlyLocationService: ForegroundOnlyLocationService? = null
 
     private lateinit var foregroundOnlyBroadcastReceiver: ForegroundOnlyBroadcastReceiver
-
     private lateinit var sharedPreferences: SharedPreferences
-
     private lateinit var foregroundOnlyLocationButton: Button
-
     private lateinit var outputTextView: TextView
+
+    private val runningQOrLater = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
 
     private val foregroundOnlyServiceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, service: IBinder) {
@@ -139,6 +132,13 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
     }
 
     private fun requestForegroundPermissions() {
+        val permissionRequests = arrayListOf(Manifest.permission.ACCESS_FINE_LOCATION)
+
+        // TODO: Step 3.4, Add another entry to permission request array.
+        if (runningQOrLater) {
+            permissionRequests.add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
+
         val provideRationale = ActivityCompat.shouldShowRequestPermissionRationale(
             this,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -153,16 +153,16 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
                 .setAction(R.string.ok) {
                     ActivityCompat.requestPermissions(
                         this@MainActivity,
-                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                        permissionRequests.toTypedArray(),
                         REQUEST_FOREGROUND_ONLY_PERMISSIONS_REQUEST_CODE
                     )
                 }
                 .show()
         } else {
-            Log.d(TAG, "Request foreground only permission")
+            Log.d(TAG, "Request foreground (and possibly background) permission")
             ActivityCompat.requestPermissions(
                 this@MainActivity,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                permissionRequests.toTypedArray(),
                 REQUEST_FOREGROUND_ONLY_PERMISSIONS_REQUEST_CODE
             )
         }
@@ -173,18 +173,32 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
         permissions: Array<String>,
         grantResults: IntArray
     ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults) // ✅ FIXED
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         Log.d(TAG, "onRequestPermissionResult")
 
         when (requestCode) {
-            REQUEST_FOREGROUND_ONLY_PERMISSIONS_REQUEST_CODE -> when {
-                grantResults.isEmpty() -> Log.d(TAG, "User interaction was cancelled.")
+            REQUEST_FOREGROUND_ONLY_PERMISSIONS_REQUEST_CODE -> {
 
-                grantResults[0] == PackageManager.PERMISSION_GRANTED ->
+                if (grantResults.isEmpty()) {
+                    Log.d(TAG, "User interaction was cancelled.")
+                    return
+                }
+
+                // TODO: Step 3.5 — Check both foreground and background permissions
+                var foregroundAndBackgroundLocationApproved =
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+
+                if (runningQOrLater) {
+                    foregroundAndBackgroundLocationApproved =
+                        foregroundAndBackgroundLocationApproved &&
+                                (grantResults.size > 1 && grantResults[1] == PackageManager.PERMISSION_GRANTED)
+                }
+
+                // TODO: Step 3.6 — Call method if permissions granted
+                if (foregroundAndBackgroundLocationApproved) {
                     foregroundOnlyLocationService?.subscribeToLocationUpdates()
-
-                else -> {
+                } else {
                     updateButtonState(false)
 
                     Snackbar.make(
@@ -195,7 +209,7 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
                         .setAction(R.string.settings) {
                             val intent = Intent().apply {
                                 action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
-                                data = Uri.fromParts("package", packageName, null) // ✅ FIXED
+                                data = Uri.fromParts("package", packageName, null)
                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
                             startActivity(intent)
